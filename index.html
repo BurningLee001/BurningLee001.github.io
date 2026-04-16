@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>随机方位提示 (有音频)</title>
+  <title>一个人练步伐 (有音频)</title>
   <style>
     body {
       margin: 0;
@@ -108,7 +108,7 @@
       <div class="section">
         <div class="radio-line">
           <input type="radio" id="modeFixed" name="mode" value="fixed" checked />
-          <label for="modeFixed" style="margin:0;">模式一：固定间隔</label>
+          <label for="modeFixed" style="margin:0;">固定间隔</label>
         </div>
         <div id="fixedSection">
           <label for="fixedInterval">固定间隔（秒）, 需大于1</label>
@@ -119,17 +119,17 @@
       <div class="section">
         <div class="radio-line">
           <input type="radio" id="modeRandom" name="mode" value="random" />
-          <label for="modeRandom" style="margin:0;">模式二：随机区间间隔 (Steven建议2-4秒)</label>
+          <label for="modeRandom" style="margin:0;">随机间隔 (Steven建议2-4秒)</label>
         </div>
         <div id="randomSection" class="hidden">
           <div class="row">
             <div>
               <label for="minInterval">下限（秒）, 需大于1</label>
-              <input id="minInterval" type="number" min="0.5" step="0.5" value="1.5" />
+              <input id="minInterval" type="number" min="0.5" step="0.5" value="2" />
             </div>
             <div>
               <label for="maxInterval">上限（秒）</label>
-              <input id="maxInterval" type="number" min="0.5" step="0.5" value="3" />
+              <input id="maxInterval" type="number" min="0.5" step="0.5" value="4" />
             </div>
           </div>
         </div>
