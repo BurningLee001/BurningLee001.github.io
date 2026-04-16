@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>随机方位提示</title>
+<style>
+body {margin:0;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC";background:#f5f5f7;display:flex;justify-content:center;align-items:center;height:100vh;}
+.container{background:white;padding:24px;border-radius:20px;text-align:center;width:90%;max-width:500px;}
+.phrase{font-size:56px;margin:30px 0;}
+button,input{padding:12px;font-size:18px;border-radius:12px;margin-top:10px;width:100%;}
+.start{background:#007aff;color:white;border:none;}
+.stop{background:#ff3b30;color:white;border:none;}
+</style>
+</head>
+<body>
+<div class="container">
+<h2>随机方位提示</h2>
+<div id="phrase" class="phrase">准备开始</div>
+<input id="interval" type="number" value="2" step="0.5"/>
+<button class="start" onclick="start()">开始</button>
+<button class="stop" onclick="stop()">停止</button>
+<div id="status">未运行</div>
+</div>
+
+<script>
+const items=[
+{text:"左前",audio:"zuoqian.mp3"},
+{text:"右前",audio:"youqian.mp3"},
+{text:"左后",audio:"zuohou.mp3"},
+{text:"右后",audio:"youhou.mp3"}
+];
+
+let timer=null;
+let audio=null;
+
+function play(src){
+if(audio){audio.pause();audio.currentTime=0;}
+audio=new Audio(src);
+audio.play();
+}
+
+function run(){
+let item=items[Math.floor(Math.random()*items.length)];
+document.getElementById("phrase").innerText=item.text;
+play(item.audio);
+}
+
+function start(){
+stop();
+let t=parseFloat(document.getElementById("interval").value);
+run();
+timer=setInterval(run,t*1000);
+document.getElementById("status").innerText="运行中";
+}
+
+function stop(){
+if(timer){clearInterval(timer);timer=null;}
+if(audio){audio.pause();audio.currentTime=0;}
+document.getElementById("status").innerText="已停止";
+}
+</script>
+</body>
+</html>
