@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>随机方位提示（稳定版）</title>
+  <title>随机方位提示（iPhone更稳版）</title>
   <style>
     body {
       margin: 0;
@@ -24,27 +24,24 @@
       box-shadow: 0 8px 24px rgba(0,0,0,0.08);
       text-align: center;
     }
-    h1 {
-      margin-top: 0;
-      font-size: 28px;
-    }
+    h1 { margin-top: 0; font-size: 28px; }
     .phrase {
       font-size: 56px;
       font-weight: bold;
-      margin: 20px 0 8px;
+      margin: 18px 0 8px;
       min-height: 72px;
     }
     .image {
       font-size: 120px;
       line-height: 1;
       min-height: 140px;
-      margin: 10px 0 20px;
+      margin: 8px 0 18px;
     }
     .controls {
       display: flex;
       flex-direction: column;
       gap: 16px;
-      margin-top: 20px;
+      margin-top: 18px;
     }
     label {
       font-size: 18px;
@@ -67,30 +64,15 @@
       border-radius: 14px;
       cursor: pointer;
     }
-    .start-btn {
-      background: #007aff;
-      color: white;
-    }
-    .stop-btn {
-      background: #ff3b30;
-      color: white;
-    }
-    .status {
-      margin-top: 18px;
-      font-size: 16px;
-      color: #666;
-      min-height: 24px;
-    }
-    .tip {
-      margin-top: 8px;
-      font-size: 14px;
-      color: #888;
-    }
+    .start-btn { background: #007aff; color: white; }
+    .stop-btn { background: #ff3b30; color: white; }
+    .status { margin-top: 18px; font-size: 16px; color: #666; min-height: 24px; }
+    .tip { margin-top: 8px; font-size: 14px; color: #888; }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>随机方位提示（稳定版）</h1>
+    <h1>随机方位提示</h1>
     <div id="phrase" class="phrase">准备开始</div>
     <div id="image" class="image">⬤</div>
 
@@ -105,133 +87,188 @@
     </div>
 
     <div id="status" class="status">未运行</div>
-    <div class="tip">请把本文件和 4 个音频放在同一文件夹：zuoqian.mp3 / youqian.mp3 / zuohou.mp3 / youhou.mp3</div>
   </div>
 
   <script>
     const items = [
-      { label: "左前", audio: "zuoqian.mp3", icon: "↖" },
-      { label: "右前", audio: "youqian.mp3", icon: "↗" },
-      { label: "左后", audio: "zuohou.mp3", icon: "↙" },
-      { label: "右后", audio: "youhou.mp3", icon: "↘" }
+      { label: "左前", file: "zuoqian.mp3", icon: "↖" },
+      { label: "右前", file: "youqian.mp3", icon: "↗" },
+      { label: "左后", file: "zuohou.mp3", icon: "↙" },
+      { label: "右后", file: "youhou.mp3", icon: "↘" }
     ];
 
     const phraseEl = document.getElementById("phrase");
     const imageEl = document.getElementById("image");
     const statusEl = document.getElementById("status");
     const intervalEl = document.getElementById("interval");
-    const startBtn = document.getElementById("startBtn");
-    const stopBtn = document.getElementById("stopBtn");
 
-    let currentAudio = null;
-    let isRunning = false;
-    let pendingTimer = null;
+    let audioCtx = null;
+    let audioUnlocked = false;
+    let buffers = {};
+    let running = false;
+    let timer = null;
     let lastIndex = -1;
+    let currentSource = null;
 
-    // 预加载并复用音频对象，避免反复 new Audio() 导致 Safari/移动端失稳
-    const audioPool = {};
-    items.forEach(item => {
-      const a = new Audio(item.audio);
-      a.preload = "auto";
-      audioPool[item.label] = a;
-    });
+    function setStatus(msg) {
+      statusEl.textContent = msg;
+    }
 
     function chooseNextItem() {
-      if (items.length === 1) return items[0];
       let idx;
       do {
         idx = Math.floor(Math.random() * items.length);
-      } while (idx === lastIndex);
+      } while (items.length > 1 && idx === lastIndex);
       lastIndex = idx;
       return items[idx];
     }
 
-    function clearPending() {
-      if (pendingTimer) {
-        clearTimeout(pendingTimer);
-        pendingTimer = null;
+    async function ensureAudioContext() {
+      if (!audioCtx) {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (!Ctx) {
+          throw new Error("当前浏览器不支持 Web Audio API");
+        }
+        audioCtx = new Ctx();
+      }
+      if (audioCtx.state !== "running") {
+        await audioCtx.resume();
       }
     }
 
-    function stopCurrentAudio() {
-      if (currentAudio) {
-        currentAudio.pause();
-        currentAudio.currentTime = 0;
+    async function unlockAudio() {
+      await ensureAudioContext();
+
+      // 用一个极短的静音缓冲来“解锁” iPhone/Safari 的音频上下文
+      const buffer = audioCtx.createBuffer(1, 1, 22050);
+      const source = audioCtx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(audioCtx.destination);
+      source.start(0);
+
+      audioUnlocked = true;
+    }
+
+    async function loadOneFile(file) {
+      const resp = await fetch(file, { cache: "force-cache" });
+      if (!resp.ok) {
+        throw new Error(`加载失败: ${file}`);
+      }
+      const arr = await resp.arrayBuffer();
+      return await audioCtx.decodeAudioData(arr.slice(0));
+    }
+
+    async function preloadAllAudio() {
+      await ensureAudioContext();
+      setStatus("正在加载音频...");
+
+      for (const item of items) {
+        buffers[item.label] = await loadOneFile(item.file);
+      }
+
+      setStatus("音频已加载，准备开始");
+    }
+
+    function stopCurrentSource() {
+      if (currentSource) {
+        try { currentSource.stop(0); } catch (e) {}
+        try { currentSource.disconnect(); } catch (e) {}
+        currentSource = null;
       }
     }
 
-    function scheduleNext(delayMs) {
-      clearPending();
-      if (!isRunning) return;
-      pendingTimer = setTimeout(() => {
-        runCycle();
-      }, delayMs);
+    function playBuffer(label) {
+      const buffer = buffers[label];
+      if (!buffer) throw new Error(`未找到音频缓冲: ${label}`);
+
+      stopCurrentSource();
+
+      const source = audioCtx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(audioCtx.destination);
+      source.start(0);
+      currentSource = source;
+
+      source.onended = () => {
+        if (currentSource === source) {
+          currentSource.disconnect();
+          currentSource = null;
+        }
+      };
+
+      return buffer.duration;
     }
 
-    function runCycle() {
-      if (!isRunning) return;
+    async function runOnce() {
+      if (!running) return;
 
-      const item = chooseNextItem();
-      phraseEl.textContent = item.label;
-      imageEl.textContent = item.icon;
+      try {
+        await ensureAudioContext();
 
-      stopCurrentAudio();
-      currentAudio = audioPool[item.label];
-      currentAudio.currentTime = 0;
+        const item = chooseNextItem();
+        phraseEl.textContent = item.label;
+        imageEl.textContent = item.icon;
 
-      const intervalSeconds = parseFloat(intervalEl.value);
-      const gapMs = (!isNaN(intervalSeconds) && intervalSeconds > 0) ? intervalSeconds * 1000 : 2000;
-
-      const playPromise = currentAudio.play();
-
-      if (playPromise !== undefined) {
-        playPromise.then(() => {
-          statusEl.textContent = `运行中：每 ${intervalSeconds || 2} 秒输出一次`;
-          const durationMs = isFinite(currentAudio.duration) && currentAudio.duration > 0
-            ? currentAudio.duration * 1000
-            : 800;
-          // 下一轮在“音频结束 + 用户设定间隔”后再开始，更稳
-          scheduleNext(durationMs + gapMs);
-        }).catch(err => {
-          console.error(err);
-          statusEl.textContent = "音频播放失败：请先手动点一次开始，并确认音频文件存在";
-          // 失败时仍按设定时间继续尝试
-          scheduleNext(gapMs);
-        });
-      } else {
-        scheduleNext(gapMs + 800);
+        playBuffer(item.label);
+      } catch (err) {
+        console.error(err);
+        setStatus("播放音频失败：请刷新页面后再次点击开始");
       }
     }
 
-    function startPrompt() {
+    async function startPrompt() {
       const intervalSeconds = parseFloat(intervalEl.value);
       if (isNaN(intervalSeconds) || intervalSeconds <= 0) {
         alert("请输入大于 0 的时间间隔");
         return;
       }
 
-      stopPrompt(false);
-      isRunning = true;
-      statusEl.textContent = "启动中...";
-      runCycle();
-    }
+      try {
+        stopPrompt(false);
 
-    function stopPrompt(updateStatus = true) {
-      isRunning = false;
-      clearPending();
-      stopCurrentAudio();
-      if (updateStatus) {
-        statusEl.textContent = "已停止";
+        setStatus("启动中...");
+        await ensureAudioContext();
+
+        if (!audioUnlocked) {
+          await unlockAudio();
+        }
+
+        if (Object.keys(buffers).length === 0) {
+          await preloadAllAudio();
+        }
+
+        running = true;
+        await runOnce();
+
+        timer = setInterval(() => {
+          runOnce();
+        }, intervalSeconds * 1000);
+
+        setStatus(`运行中：每 ${intervalSeconds} 秒输出一次`);
+      } catch (err) {
+        console.error(err);
+        setStatus("启动失败：请确认4个 mp3 与 index.html 在同一目录");
       }
     }
 
-    startBtn.addEventListener("click", startPrompt);
-    stopBtn.addEventListener("click", () => stopPrompt(true));
+    function stopPrompt(updateStatus = true) {
+      running = false;
+      if (timer) {
+        clearInterval(timer);
+        timer = null;
+      }
+      stopCurrentSource();
+      if (updateStatus) setStatus("已停止");
+    }
 
-    // 页面切到后台时停止，避免移动端音频状态错乱
-    document.addEventListener("visibilitychange", () => {
+    document.getElementById("startBtn").addEventListener("click", startPrompt);
+    document.getElementById("stopBtn").addEventListener("click", () => stopPrompt(true));
+
+    document.addEventListener("visibilitychange", async () => {
       if (document.hidden) {
         stopPrompt(true);
+      } else if (audioCtx && audioCtx.state !== "running") {
+        try { await audioCtx.resume(); } catch (e) {}
       }
     });
   </script>
