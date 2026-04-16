@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>随机方位提示 (有音频）</title>
+  <title>随机方位提示</title>
   <style>
     body {
       margin: 0;
@@ -17,7 +17,7 @@
     }
     .container {
       width: 90%;
-      max-width: 560px;
+      max-width: 620px;
       background: white;
       border-radius: 20px;
       padding: 24px;
@@ -42,20 +42,47 @@
       flex-direction: column;
       gap: 16px;
       margin-top: 18px;
-    }
-    label {
-      font-size: 18px;
-      display: block;
-      margin-bottom: 8px;
       text-align: left;
     }
-    input {
+    .section {
+      border: 1px solid #e5e5ea;
+      border-radius: 14px;
+      padding: 14px;
+      background: #fafafa;
+    }
+    .row {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .row > div {
+      flex: 1;
+      min-width: 140px;
+    }
+    label {
+      font-size: 16px;
+      display: block;
+      margin-bottom: 8px;
+    }
+    input[type="number"] {
       width: 100%;
       padding: 12px;
       font-size: 18px;
       border: 1px solid #ccc;
       border-radius: 12px;
       box-sizing: border-box;
+      background: white;
+    }
+    .radio-line {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+      font-size: 18px;
+    }
+    .radio-line input[type="radio"] {
+      transform: scale(1.2);
     }
     button {
       padding: 14px 18px;
@@ -63,11 +90,12 @@
       border: none;
       border-radius: 14px;
       cursor: pointer;
+      width: 100%;
     }
     .start-btn { background: #007aff; color: white; }
     .stop-btn { background: #ff3b30; color: white; }
     .status { margin-top: 18px; font-size: 16px; color: #666; min-height: 24px; }
-    .tip { margin-top: 8px; font-size: 14px; color: #888; }
+    .hidden { display: none; }
   </style>
 </head>
 <body>
@@ -77,9 +105,34 @@
     <div id="image" class="image">⬤</div>
 
     <div class="controls">
-      <div>
-        <label for="interval">每次输出间隔（秒）</label>
-        <input id="interval" type="number" min="0.5" step="0.5" value="2" />
+      <div class="section">
+        <div class="radio-line">
+          <input type="radio" id="modeFixed" name="mode" value="fixed" checked />
+          <label for="modeFixed" style="margin:0;">模式一：固定间隔</label>
+        </div>
+        <div id="fixedSection">
+          <label for="fixedInterval">固定间隔（秒）,需大于1</label>
+          <input id="fixedInterval" type="number" min="0.5" step="0.5" value="2" />
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="radio-line">
+          <input type="radio" id="modeRandom" name="mode" value="random" />
+          <label for="modeRandom" style="margin:0;">模式二：随机区间间隔</label>
+        </div>
+        <div id="randomSection" class="hidden">
+          <div class="row">
+            <div>
+              <label for="minInterval">下限（秒）,需大于1</label>
+              <input id="minInterval" type="number" min="0.5" step="0.5" value="1.5" />
+            </div>
+            <div>
+              <label for="maxInterval">上限（秒）</label>
+              <input id="maxInterval" type="number" min="0.5" step="0.5" value="3" />
+            </div>
+          </div>
+        </div>
       </div>
 
       <button class="start-btn" id="startBtn">开始</button>
@@ -100,7 +153,15 @@
     const phraseEl = document.getElementById("phrase");
     const imageEl = document.getElementById("image");
     const statusEl = document.getElementById("status");
-    const intervalEl = document.getElementById("interval");
+
+    const modeFixedEl = document.getElementById("modeFixed");
+    const modeRandomEl = document.getElementById("modeRandom");
+    const fixedSectionEl = document.getElementById("fixedSection");
+    const randomSectionEl = document.getElementById("randomSection");
+
+    const fixedIntervalEl = document.getElementById("fixedInterval");
+    const minIntervalEl = document.getElementById("minInterval");
+    const maxIntervalEl = document.getElementById("maxInterval");
 
     let audioCtx = null;
     let audioUnlocked = false;
@@ -112,6 +173,12 @@
 
     function setStatus(msg) {
       statusEl.textContent = msg;
+    }
+
+    function updateModeUI() {
+      const isFixed = modeFixedEl.checked;
+      fixedSectionEl.classList.toggle("hidden", !isFixed);
+      randomSectionEl.classList.toggle("hidden", isFixed);
     }
 
     function chooseNextItem() {
@@ -138,14 +205,11 @@
 
     async function unlockAudio() {
       await ensureAudioContext();
-
-      // 用一个极短的静音缓冲来“解锁” iPhone/Safari 的音频上下文
       const buffer = audioCtx.createBuffer(1, 1, 22050);
       const source = audioCtx.createBufferSource();
       source.buffer = buffer;
       source.connect(audioCtx.destination);
       source.start(0);
-
       audioUnlocked = true;
     }
 
@@ -161,11 +225,9 @@
     async function preloadAllAudio() {
       await ensureAudioContext();
       setStatus("正在加载音频...");
-
       for (const item of items) {
         buffers[item.label] = await loadOneFile(item.file);
       }
-
       setStatus("音频已加载，准备开始");
     }
 
@@ -195,8 +257,26 @@
           currentSource = null;
         }
       };
+    }
 
-      return buffer.duration;
+    function getNextDelayMs() {
+      if (modeFixedEl.checked) {
+        const fixed = parseFloat(fixedIntervalEl.value);
+        if (isNaN(fixed) || fixed <= 1) {
+          throw new Error("固定间隔必须大于 1");
+        }
+        return fixed * 1000;
+      } else {
+        const min = parseFloat(minIntervalEl.value);
+        const max = parseFloat(maxIntervalEl.value);
+        if (isNaN(min) || isNaN(max) || min <= 1 || max <= 1) {
+          throw new Error("随机区间上下限必须大于 1");
+        }
+        if (min > max) {
+          throw new Error("随机区间下限不能大于上限");
+        }
+        return (min + Math.random() * (max - min)) * 1000;
+      }
     }
 
     async function runOnce() {
@@ -210,23 +290,31 @@
         imageEl.textContent = item.icon;
 
         playBuffer(item.label);
+
+        const nextDelayMs = getNextDelayMs();
+        const nextDelaySec = (nextDelayMs / 1000).toFixed(2);
+
+        if (modeFixedEl.checked) {
+          setStatus(`运行中：固定间隔 ${nextDelaySec} 秒`);
+        } else {
+          const min = parseFloat(minIntervalEl.value);
+          const max = parseFloat(maxIntervalEl.value);
+          setStatus(`运行中：随机间隔 ${min}–${max} 秒，本次下一条约 ${nextDelaySec} 秒后`);
+        }
+
+        timer = setTimeout(runOnce, nextDelayMs);
       } catch (err) {
         console.error(err);
-        setStatus("播放音频失败：请刷新页面后再次点击开始");
+        setStatus(err.message || "播放音频失败：请刷新页面后再次点击开始");
+        stopPrompt(false);
       }
     }
 
     async function startPrompt() {
-      const intervalSeconds = parseFloat(intervalEl.value);
-      if (isNaN(intervalSeconds) || intervalSeconds <= 0) {
-        alert("请输入大于 0 的时间间隔");
-        return;
-      }
-
       try {
         stopPrompt(false);
-
         setStatus("启动中...");
+
         await ensureAudioContext();
 
         if (!audioUnlocked) {
@@ -239,27 +327,24 @@
 
         running = true;
         await runOnce();
-
-        timer = setInterval(() => {
-          runOnce();
-        }, intervalSeconds * 1000);
-
-        setStatus(`运行中：每 ${intervalSeconds} 秒输出一次`);
       } catch (err) {
         console.error(err);
-        setStatus("启动失败：请确认4个 mp3 与 index.html 在同一目录");
+        setStatus("启动失败：请确认音频文件存在且参数填写正确");
       }
     }
 
     function stopPrompt(updateStatus = true) {
       running = false;
       if (timer) {
-        clearInterval(timer);
+        clearTimeout(timer);
         timer = null;
       }
       stopCurrentSource();
       if (updateStatus) setStatus("已停止");
     }
+
+    modeFixedEl.addEventListener("change", updateModeUI);
+    modeRandomEl.addEventListener("change", updateModeUI);
 
     document.getElementById("startBtn").addEventListener("click", startPrompt);
     document.getElementById("stopBtn").addEventListener("click", () => stopPrompt(true));
@@ -271,6 +356,8 @@
         try { await audioCtx.resume(); } catch (e) {}
       }
     });
+
+    updateModeUI();
   </script>
 </body>
 </html>
