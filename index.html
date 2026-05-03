@@ -202,21 +202,26 @@
     mode1: {
       title: "四方向随机提示",
       items: [
-        { label: "左前", file: "zuoqian.mp3", icon: "↖" },
-        { label: "右前", file: "youqian.mp3", icon: "↗" },
-        { label: "左后", file: "zuohou.mp3", icon: "↙" },
-        { label: "右后", file: "youhou.mp3", icon: "↘" }
-      ]
+        { label: "左前", file: "zuoqian.mp3", icon: "↖", group: "front" },
+        { label: "右前", file: "youqian.mp3", icon: "↗", group: "front" },
+        { label: "左后", file: "zuohou.mp3", icon: "↙", group: "back" },
+        { label: "右后", file: "youhou.mp3", icon: "↘", group: "back" }
+      ],
+  
+      getDelayMs: function(item, min, max) {
+        const mid = (min + max) / 2;
+  
+        if (item.group === "front") {
+          return (min + Math.random() * (mid - min)) * 1000;
+        }
+  
+        if (item.group === "back") {
+          return (mid + Math.random() * (max - mid)) * 1000;
+        }
+  
+        return (min + Math.random() * (max - min)) * 1000;
+      }
     }
-
-    // 以后加模式时，在这里继续加：
-    // mode2: {
-    //   title: "两方向随机提示",
-    //   items: [
-    //     { label: "左", file: "left.mp3", icon: "←" },
-    //     { label: "右", file: "right.mp3", icon: "→" }
-    //   ]
-    // }
   };
 
   let currentMode = "mode1";
@@ -280,12 +285,9 @@
   }
 
   function chooseNextItem() {
-    let idx;
-    do {
-      idx = Math.floor(Math.random() * currentItems.length);
-    } while (currentItems.length > 1 && idx === lastIndex);
-    lastIndex = idx;
-    return currentItems[idx];
+  let idx = Math.floor(Math.random() * currentItems.length);
+  lastIndex = idx;
+  return currentItems[idx];
   }
 
   async function ensureAudioContext() {
@@ -358,26 +360,53 @@
       }
     };
   }
-
-  function getNextDelayMs() {
+  function getNextDelayMs(item) {
     if (modeFixedEl.checked) {
       const fixed = parseFloat(fixedIntervalEl.value);
       if (isNaN(fixed) || fixed <= 1) {
         throw new Error("固定间隔必须大于 1");
       }
       return fixed * 1000;
-    } else {
-      const min = parseFloat(minIntervalEl.value);
-      const max = parseFloat(maxIntervalEl.value);
-      if (isNaN(min) || isNaN(max) || min <= 1 || max <= 1) {
-        throw new Error("随机区间上下限必须大于 1");
-      }
-      if (min > max) {
-        throw new Error("随机区间下限不能大于上限");
-      }
-      return (min + Math.random() * (max - min)) * 1000;
     }
+  
+    const min = parseFloat(minIntervalEl.value);
+    const max = parseFloat(maxIntervalEl.value);
+  
+    if (isNaN(min) || isNaN(max) || min <= 1 || max <= 1) {
+      throw new Error("随机区间上下限必须大于 1");
+    }
+  
+    if (min > max) {
+      throw new Error("随机区间下限不能大于上限");
+    }
+  
+    const config = modeConfigs[currentMode];
+  
+    if (typeof config.getDelayMs === "function") {
+      return config.getDelayMs(item, min, max);
+    }
+  
+    return (min + Math.random() * (max - min)) * 1000;
   }
+  // function getNextDelayMs() {
+  //   if (modeFixedEl.checked) {
+  //     const fixed = parseFloat(fixedIntervalEl.value);
+  //     if (isNaN(fixed) || fixed <= 1) {
+  //       throw new Error("固定间隔必须大于 1");
+  //     }
+  //     return fixed * 1000;
+  //   } else {
+  //     const min = parseFloat(minIntervalEl.value);
+  //     const max = parseFloat(maxIntervalEl.value);
+  //     if (isNaN(min) || isNaN(max) || min <= 1 || max <= 1) {
+  //       throw new Error("随机区间上下限必须大于 1");
+  //     }
+  //     if (min > max) {
+  //       throw new Error("随机区间下限不能大于上限");
+  //     }
+  //     return (min + Math.random() * (max - min)) * 1000;
+  //   }
+  // }
 
   async function runOnce() {
     if (!running) return;
@@ -390,8 +419,9 @@
       imageEl.textContent = item.icon || "";
 
       playBuffer(item.label);
-
-      const nextDelayMs = getNextDelayMs();
+      
+      const nextDelayMs = getNextDelayMs(item);
+      // const nextDelayMs = getNextDelayMs();
       const nextDelaySec = (nextDelayMs / 1000).toFixed(2);
 
       if (modeFixedEl.checked) {
