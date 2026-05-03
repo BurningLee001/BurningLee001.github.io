@@ -207,18 +207,23 @@
         { label: "左后", file: "zuohou.mp3", icon: "↙", group: "back" },
         { label: "右后", file: "youhou.mp3", icon: "↘", group: "back" }
       ],
-  
+    
+      chooseItem: function(items, lastIndex) {
+        const idx = Math.floor(Math.random() * items.length);
+        return { item: items[idx], index: idx };
+      },
+    
       getDelayMs: function(item, min, max) {
         const mid = (min + max) / 2;
-  
+    
         if (item.group === "front") {
           return (min + Math.random() * (mid - min)) * 1000;
         }
-  
+    
         if (item.group === "back") {
           return (mid + Math.random() * (max - mid)) * 1000;
         }
-  
+    
         return (min + Math.random() * (max - min)) * 1000;
       }
     }
@@ -284,11 +289,24 @@
     randomSectionEl.classList.toggle("hidden", isFixed);
   }
 
-  function chooseNextItem() {
-  let idx = Math.floor(Math.random() * currentItems.length);
+    function chooseNextItem() {
+      const config = modeConfigs[currentMode];
+    
+      if (typeof config.chooseItem === "function") {
+        const result = config.chooseItem(currentItems, lastIndex);
+        lastIndex = result.index;
+        return result.item;
+  }
+
+  const idx = Math.floor(Math.random() * currentItems.length);
   lastIndex = idx;
   return currentItems[idx];
-  }
+}
+  // function chooseNextItem() {
+  // let idx = Math.floor(Math.random() * currentItems.length);
+  // lastIndex = idx;
+  // return currentItems[idx];
+  // }
 
   async function ensureAudioContext() {
     if (!audioCtx) {
