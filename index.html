@@ -94,57 +94,128 @@
     }
     .start-btn { background: #007aff; color: white; }
     .stop-btn { background: #ff3b30; color: white; }
+    .back-btn { background: #8e8e93; color: white; }
+    .mode-btn { background: #007aff; color: white; margin-top: 14px; }
+    .disabled-btn { background: #d1d1d6; color: #777; margin-top: 14px; cursor: not-allowed; }
     .status { margin-top: 18px; font-size: 16px; color: #666; min-height: 24px; }
     .hidden { display: none; }
+    .subtitle {
+      font-size: 16px;
+      color: #666;
+      margin: 8px 0 20px;
+      line-height: 1.5;
+    }
+    .mode-card {
+      border: 1px solid #e5e5ea;
+      border-radius: 16px;
+      padding: 16px;
+      background: #fafafa;
+      text-align: left;
+      margin-top: 14px;
+    }
+    .mode-title {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .mode-desc {
+      font-size: 15px;
+      color: #666;
+      line-height: 1.45;
+      margin-bottom: 10px;
+    }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>随机方位提示(有声音)</h1>
-    <div id="phrase" class="phrase">准备开始</div>
-    <div id="image" class="image">⬤</div>
 
-    <div class="controls">
-      <div class="section">
-        <div class="radio-line">
-          <input type="radio" id="modeFixed" name="mode" value="fixed" checked />
-          <label for="modeFixed" style="margin:0;">固定间隔</label>
-        </div>
-        <div id="fixedSection">
-          <label for="fixedInterval">固定间隔（秒）, 需大于1</label>
-          <input id="fixedInterval" type="number" min="0.5" step="0.5" value="2" />
-        </div>
+    <!-- 首页：模式选择 -->
+    <div id="homePage">
+      <h1>一个人练步伐</h1>
+      <div class="subtitle">请选择训练模式</div>
+
+      <div class="mode-card">
+        <div class="mode-title">模式1：四方向随机提示</div>
+        <div class="mode-desc">随机输出左前、右前、左后、右后，并播放对应语音。</div>
+        <button class="mode-btn" id="enterMode1Btn">进入训练</button>
       </div>
 
-      <div class="section">
-        <div class="radio-line">
-          <input type="radio" id="modeRandom" name="mode" value="random" />
-          <label for="modeRandom" style="margin:0;">随机间隔 (Steven建议2-4秒)</label>
+      <div class="mode-card">
+        <div class="mode-title">模式2：待开发</div>
+        <div class="mode-desc">这里预留给未来添加其他训练模式。</div>
+        <button class="disabled-btn" disabled>暂未开放</button>
+      </div>
+    </div>
+
+    <!-- 模式1：保留原稳定逻辑 -->
+    <div id="mode1Page" class="hidden">
+      <h1>随机方位提示(有声音)</h1>
+      <div id="phrase" class="phrase">准备开始</div>
+      <div id="image" class="image">⬤</div>
+
+      <div class="controls">
+        <div class="section">
+          <div class="radio-line">
+            <input type="radio" id="modeFixed" name="mode" value="fixed" checked />
+            <label for="modeFixed" style="margin:0;">固定间隔</label>
+          </div>
+          <div id="fixedSection">
+            <label for="fixedInterval">固定间隔（秒）, 需大于1</label>
+            <input id="fixedInterval" type="number" min="0.5" step="0.5" value="2" />
+          </div>
         </div>
-        <div id="randomSection" class="hidden">
-          <div class="row">
-            <div>
-              <label for="minInterval">下限（秒）, 需大于1</label>
-              <input id="minInterval" type="number" min="0.5" step="0.5" value="2" />
-            </div>
-            <div>
-              <label for="maxInterval">上限（秒）</label>
-              <input id="maxInterval" type="number" min="0.5" step="0.5" value="4" />
+
+        <div class="section">
+          <div class="radio-line">
+            <input type="radio" id="modeRandom" name="mode" value="random" />
+            <label for="modeRandom" style="margin:0;">随机间隔 (Steven建议2-4秒)</label>
+          </div>
+          <div id="randomSection" class="hidden">
+            <div class="row">
+              <div>
+                <label for="minInterval">下限（秒）, 需大于1</label>
+                <input id="minInterval" type="number" min="0.5" step="0.5" value="2" />
+              </div>
+              <div>
+                <label for="maxInterval">上限（秒）</label>
+                <input id="maxInterval" type="number" min="0.5" step="0.5" value="4" />
+              </div>
             </div>
           </div>
         </div>
+
+        <button class="start-btn" id="startBtn">开始</button>
+        <button class="stop-btn" id="stopBtn">停止</button>
+        <button class="back-btn" id="backHomeBtn">返回首页</button>
       </div>
 
-      <button class="start-btn" id="startBtn">开始</button>
-      <button class="stop-btn" id="stopBtn">停止</button>
+      <div id="status" class="status">未运行</div>
+      <div style="font-size:14px;color:#999;margin-top:6px;">
+        若无声音，请关闭手机静音模式 🔇
+      </div>
     </div>
-
-    <div id="status" class="status">未运行</div>
-    <div style="font-size:14px;color:#999;margin-top:6px;">
-  若无声音，请关闭手机静音模式 🔇</div>
   </div>
 
   <script>
+    // ===== 新增：页面切换，只影响UI，不改核心训练逻辑 =====
+    const homePageEl = document.getElementById("homePage");
+    const mode1PageEl = document.getElementById("mode1Page");
+
+    function enterMode1Page() {
+      homePageEl.classList.add("hidden");
+      mode1PageEl.classList.remove("hidden");
+    }
+
+    function goHomePage() {
+      stopPrompt(true);
+      mode1PageEl.classList.add("hidden");
+      homePageEl.classList.remove("hidden");
+    }
+
+    document.getElementById("enterMode1Btn").addEventListener("click", enterMode1Page);
+    document.getElementById("backHomeBtn").addEventListener("click", goHomePage);
+
+    // ===== 以下为原稳定版核心逻辑，尽量保持不变 =====
     const items = [
       { label: "左前", file: "zuoqian.mp3", icon: "↖" },
       { label: "右前", file: "youqian.mp3", icon: "↗" },
