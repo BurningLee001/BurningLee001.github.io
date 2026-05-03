@@ -135,13 +135,13 @@
       <div class="subtitle">请选择训练模式</div>
 
       <div class="mode-card">
-        <div class="mode-title">模式1：四方向随机提示</div>
+        <div class="mode-title">1：四方向随机提示</div>
         <div class="mode-desc">随机输出左前、右前、左后、右后，并播放对应语音。</div>
         <button class="mode-btn" id="enterMode1Btn">进入训练</button>
       </div>
 
       <div class="mode-card">
-        <div class="mode-title">模式2：待开发</div>
+        <div class="mode-title">2：待开发</div>
         <div class="mode-desc">这里预留给未来添加其他训练模式。</div>
         <button class="disabled-btn" disabled>暂未开放</button>
       </div>
@@ -149,7 +149,7 @@
 
     <!-- 模式1：保留原稳定逻辑 -->
     <div id="mode1Page" class="hidden">
-      <h1>随机方位提示(有声音)</h1>
+      <h1>四方向随机提示</h1>
       <div id="phrase" class="phrase">准备开始</div>
       <div id="image" class="image">⬤</div>
 
@@ -197,240 +197,267 @@
   </div>
 
   <script>
-    // ===== 新增：页面切换，只影响UI，不改核心训练逻辑 =====
-    const homePageEl = document.getElementById("homePage");
-    const mode1PageEl = document.getElementById("mode1Page");
-
-    function enterMode1Page() {
-      homePageEl.classList.add("hidden");
-      mode1PageEl.classList.remove("hidden");
+  // ===== 新增：模式配置 =====
+  const modeConfigs = {
+    mode1: {
+      title: "四方向随机提示",
+      items: [
+        { label: "左前", file: "zuoqian.mp3", icon: "↖" },
+        { label: "右前", file: "youqian.mp3", icon: "↗" },
+        { label: "左后", file: "zuohou.mp3", icon: "↙" },
+        { label: "右后", file: "youhou.mp3", icon: "↘" }
+      ]
     }
 
-    function goHomePage() {
-      stopPrompt(true);
-      mode1PageEl.classList.add("hidden");
-      homePageEl.classList.remove("hidden");
-    }
+    // 以后加模式时，在这里继续加：
+    // mode2: {
+    //   title: "两方向随机提示",
+    //   items: [
+    //     { label: "左", file: "left.mp3", icon: "←" },
+    //     { label: "右", file: "right.mp3", icon: "→" }
+    //   ]
+    // }
+  };
 
-    document.getElementById("enterMode1Btn").addEventListener("click", enterMode1Page);
-    document.getElementById("backHomeBtn").addEventListener("click", goHomePage);
+  let currentMode = "mode1";
+  let currentItems = modeConfigs[currentMode].items;
 
-    // ===== 以下为原稳定版核心逻辑，尽量保持不变 =====
-    const items = [
-      { label: "左前", file: "zuoqian.mp3", icon: "↖" },
-      { label: "右前", file: "youqian.mp3", icon: "↗" },
-      { label: "左后", file: "zuohou.mp3", icon: "↙" },
-      { label: "右后", file: "youhou.mp3", icon: "↘" }
-    ];
+  // ===== 页面切换，只影响UI，不改核心训练逻辑 =====
+  const homePageEl = document.getElementById("homePage");
+  const mode1PageEl = document.getElementById("mode1Page");
 
-    const phraseEl = document.getElementById("phrase");
-    const imageEl = document.getElementById("image");
-    const statusEl = document.getElementById("status");
+  function enterMode1Page() {
+    currentMode = "mode1";
+    currentItems = modeConfigs[currentMode].items;
 
-    const modeFixedEl = document.getElementById("modeFixed");
-    const modeRandomEl = document.getElementById("modeRandom");
-    const fixedSectionEl = document.getElementById("fixedSection");
-    const randomSectionEl = document.getElementById("randomSection");
+    // 切换模式时重置状态，避免之后新增模式时音频缓存混用
+    buffers = {};
+    lastIndex = -1;
 
-    const fixedIntervalEl = document.getElementById("fixedInterval");
-    const minIntervalEl = document.getElementById("minInterval");
-    const maxIntervalEl = document.getElementById("maxInterval");
+    homePageEl.classList.add("hidden");
+    mode1PageEl.classList.remove("hidden");
+  }
 
-    let audioCtx = null;
-    let audioUnlocked = false;
-    let buffers = {};
-    let running = false;
-    let timer = null;
-    let lastIndex = -1;
-    let currentSource = null;
+  function goHomePage() {
+    stopPrompt(true);
+    mode1PageEl.classList.add("hidden");
+    homePageEl.classList.remove("hidden");
+  }
 
-    function setStatus(msg) {
-      statusEl.textContent = msg;
-    }
+  document.getElementById("enterMode1Btn").addEventListener("click", enterMode1Page);
+  document.getElementById("backHomeBtn").addEventListener("click", goHomePage);
 
-    function updateModeUI() {
-      const isFixed = modeFixedEl.checked;
-      fixedSectionEl.classList.toggle("hidden", !isFixed);
-      randomSectionEl.classList.toggle("hidden", isFixed);
-    }
+  // ===== 以下为原稳定版核心逻辑，基本保持不变 =====
+  const phraseEl = document.getElementById("phrase");
+  const imageEl = document.getElementById("image");
+  const statusEl = document.getElementById("status");
 
-    function chooseNextItem() {
-      let idx;
-      do {
-        idx = Math.floor(Math.random() * items.length);
-      } while (items.length > 1 && idx === lastIndex);
-      lastIndex = idx;
-      return items[idx];
-    }
+  const modeFixedEl = document.getElementById("modeFixed");
+  const modeRandomEl = document.getElementById("modeRandom");
+  const fixedSectionEl = document.getElementById("fixedSection");
+  const randomSectionEl = document.getElementById("randomSection");
 
-    async function ensureAudioContext() {
-      if (!audioCtx) {
-        const Ctx = window.AudioContext || window.webkitAudioContext;
-        if (!Ctx) {
-          throw new Error("当前浏览器不支持 Web Audio API");
-        }
-        audioCtx = new Ctx();
+  const fixedIntervalEl = document.getElementById("fixedInterval");
+  const minIntervalEl = document.getElementById("minInterval");
+  const maxIntervalEl = document.getElementById("maxInterval");
+
+  let audioCtx = null;
+  let audioUnlocked = false;
+  let buffers = {};
+  let running = false;
+  let timer = null;
+  let lastIndex = -1;
+  let currentSource = null;
+
+  function setStatus(msg) {
+    statusEl.textContent = msg;
+  }
+
+  function updateModeUI() {
+    const isFixed = modeFixedEl.checked;
+    fixedSectionEl.classList.toggle("hidden", !isFixed);
+    randomSectionEl.classList.toggle("hidden", isFixed);
+  }
+
+  function chooseNextItem() {
+    let idx;
+    do {
+      idx = Math.floor(Math.random() * currentItems.length);
+    } while (currentItems.length > 1 && idx === lastIndex);
+    lastIndex = idx;
+    return currentItems[idx];
+  }
+
+  async function ensureAudioContext() {
+    if (!audioCtx) {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) {
+        throw new Error("当前浏览器不支持 Web Audio API");
       }
-      if (audioCtx.state !== "running") {
-        await audioCtx.resume();
-      }
+      audioCtx = new Ctx();
+    }
+    if (audioCtx.state !== "running") {
+      await audioCtx.resume();
+    }
+  }
+
+  async function unlockAudio() {
+    await ensureAudioContext();
+    const buffer = audioCtx.createBuffer(1, 1, 22050);
+    const source = audioCtx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(audioCtx.destination);
+    source.start(0);
+    audioUnlocked = true;
+  }
+
+  async function loadOneFile(file) {
+    const resp = await fetch(file, { cache: "force-cache" });
+    if (!resp.ok) {
+      throw new Error(`加载失败: ${file}`);
+    }
+    const arr = await resp.arrayBuffer();
+    return await audioCtx.decodeAudioData(arr.slice(0));
+  }
+
+  async function preloadAllAudio() {
+    await ensureAudioContext();
+    setStatus("正在加载音频...");
+
+    for (const item of currentItems) {
+      buffers[item.label] = await loadOneFile(item.file);
     }
 
-    async function unlockAudio() {
-      await ensureAudioContext();
-      const buffer = audioCtx.createBuffer(1, 1, 22050);
-      const source = audioCtx.createBufferSource();
-      source.buffer = buffer;
-      source.connect(audioCtx.destination);
-      source.start(0);
-      audioUnlocked = true;
-    }
+    setStatus("音频已加载，准备开始");
+  }
 
-    async function loadOneFile(file) {
-      const resp = await fetch(file, { cache: "force-cache" });
-      if (!resp.ok) {
-        throw new Error(`加载失败: ${file}`);
-      }
-      const arr = await resp.arrayBuffer();
-      return await audioCtx.decodeAudioData(arr.slice(0));
+  function stopCurrentSource() {
+    if (currentSource) {
+      try { currentSource.stop(0); } catch (e) {}
+      try { currentSource.disconnect(); } catch (e) {}
+      currentSource = null;
     }
+  }
 
-    async function preloadAllAudio() {
-      await ensureAudioContext();
-      setStatus("正在加载音频...");
-      for (const item of items) {
-        buffers[item.label] = await loadOneFile(item.file);
-      }
-      setStatus("音频已加载，准备开始");
-    }
+  function playBuffer(label) {
+    const buffer = buffers[label];
+    if (!buffer) throw new Error(`未找到音频缓冲: ${label}`);
 
-    function stopCurrentSource() {
-      if (currentSource) {
-        try { currentSource.stop(0); } catch (e) {}
-        try { currentSource.disconnect(); } catch (e) {}
+    stopCurrentSource();
+
+    const source = audioCtx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(audioCtx.destination);
+    source.start(0);
+    currentSource = source;
+
+    source.onended = () => {
+      if (currentSource === source) {
+        currentSource.disconnect();
         currentSource = null;
       }
+    };
+  }
+
+  function getNextDelayMs() {
+    if (modeFixedEl.checked) {
+      const fixed = parseFloat(fixedIntervalEl.value);
+      if (isNaN(fixed) || fixed <= 1) {
+        throw new Error("固定间隔必须大于 1");
+      }
+      return fixed * 1000;
+    } else {
+      const min = parseFloat(minIntervalEl.value);
+      const max = parseFloat(maxIntervalEl.value);
+      if (isNaN(min) || isNaN(max) || min <= 1 || max <= 1) {
+        throw new Error("随机区间上下限必须大于 1");
+      }
+      if (min > max) {
+        throw new Error("随机区间下限不能大于上限");
+      }
+      return (min + Math.random() * (max - min)) * 1000;
     }
+  }
 
-    function playBuffer(label) {
-      const buffer = buffers[label];
-      if (!buffer) throw new Error(`未找到音频缓冲: ${label}`);
+  async function runOnce() {
+    if (!running) return;
 
-      stopCurrentSource();
+    try {
+      await ensureAudioContext();
 
-      const source = audioCtx.createBufferSource();
-      source.buffer = buffer;
-      source.connect(audioCtx.destination);
-      source.start(0);
-      currentSource = source;
+      const item = chooseNextItem();
+      phraseEl.textContent = item.label;
+      imageEl.textContent = item.icon || "";
 
-      source.onended = () => {
-        if (currentSource === source) {
-          currentSource.disconnect();
-          currentSource = null;
-        }
-      };
-    }
+      playBuffer(item.label);
 
-    function getNextDelayMs() {
+      const nextDelayMs = getNextDelayMs();
+      const nextDelaySec = (nextDelayMs / 1000).toFixed(2);
+
       if (modeFixedEl.checked) {
-        const fixed = parseFloat(fixedIntervalEl.value);
-        if (isNaN(fixed) || fixed <= 1) {
-          throw new Error("固定间隔必须大于 1");
-        }
-        return fixed * 1000;
+        setStatus(`运行中：固定间隔 ${nextDelaySec} 秒`);
       } else {
         const min = parseFloat(minIntervalEl.value);
         const max = parseFloat(maxIntervalEl.value);
-        if (isNaN(min) || isNaN(max) || min <= 1 || max <= 1) {
-          throw new Error("随机区间上下限必须大于 1");
-        }
-        if (min > max) {
-          throw new Error("随机区间下限不能大于上限");
-        }
-        return (min + Math.random() * (max - min)) * 1000;
+        setStatus(`运行中：随机间隔 ${min}–${max} 秒，本次下一条约 ${nextDelaySec} 秒后`);
       }
+
+      timer = setTimeout(runOnce, nextDelayMs);
+    } catch (err) {
+      console.error(err);
+      setStatus(err.message || "播放音频失败：请刷新页面后再次点击开始");
+      stopPrompt(false);
     }
+  }
 
-    async function runOnce() {
-      if (!running) return;
+  async function startPrompt() {
+    try {
+      stopPrompt(false);
+      setStatus("启动中...");
 
-      try {
-        await ensureAudioContext();
+      await ensureAudioContext();
 
-        const item = chooseNextItem();
-        phraseEl.textContent = item.label;
-        imageEl.textContent = item.icon;
-
-        playBuffer(item.label);
-
-        const nextDelayMs = getNextDelayMs();
-        const nextDelaySec = (nextDelayMs / 1000).toFixed(2);
-
-        if (modeFixedEl.checked) {
-          setStatus(`运行中：固定间隔 ${nextDelaySec} 秒`);
-        } else {
-          const min = parseFloat(minIntervalEl.value);
-          const max = parseFloat(maxIntervalEl.value);
-          setStatus(`运行中：随机间隔 ${min}–${max} 秒，本次下一条约 ${nextDelaySec} 秒后`);
-        }
-
-        timer = setTimeout(runOnce, nextDelayMs);
-      } catch (err) {
-        console.error(err);
-        setStatus(err.message || "播放音频失败：请刷新页面后再次点击开始");
-        stopPrompt(false);
+      if (!audioUnlocked) {
+        await unlockAudio();
       }
+
+      if (Object.keys(buffers).length === 0) {
+        await preloadAllAudio();
+      }
+
+      running = true;
+      await runOnce();
+    } catch (err) {
+      console.error(err);
+      setStatus("启动失败：请确认音频文件存在且参数填写正确");
     }
+  }
 
-    async function startPrompt() {
-      try {
-        stopPrompt(false);
-        setStatus("启动中...");
-
-        await ensureAudioContext();
-
-        if (!audioUnlocked) {
-          await unlockAudio();
-        }
-
-        if (Object.keys(buffers).length === 0) {
-          await preloadAllAudio();
-        }
-
-        running = true;
-        await runOnce();
-      } catch (err) {
-        console.error(err);
-        setStatus("启动失败：请确认音频文件存在且参数填写正确");
-      }
+  function stopPrompt(updateStatus = true) {
+    running = false;
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
     }
+    stopCurrentSource();
+    if (updateStatus) setStatus("已停止");
+  }
 
-    function stopPrompt(updateStatus = true) {
-      running = false;
-      if (timer) {
-        clearTimeout(timer);
-        timer = null;
-      }
-      stopCurrentSource();
-      if (updateStatus) setStatus("已停止");
+  modeFixedEl.addEventListener("change", updateModeUI);
+  modeRandomEl.addEventListener("change", updateModeUI);
+
+  document.getElementById("startBtn").addEventListener("click", startPrompt);
+  document.getElementById("stopBtn").addEventListener("click", () => stopPrompt(true));
+
+  document.addEventListener("visibilitychange", async () => {
+    if (document.hidden) {
+      stopPrompt(true);
+    } else if (audioCtx && audioCtx.state !== "running") {
+      try { await audioCtx.resume(); } catch (e) {}
     }
+  });
 
-    modeFixedEl.addEventListener("change", updateModeUI);
-    modeRandomEl.addEventListener("change", updateModeUI);
-
-    document.getElementById("startBtn").addEventListener("click", startPrompt);
-    document.getElementById("stopBtn").addEventListener("click", () => stopPrompt(true));
-
-    document.addEventListener("visibilitychange", async () => {
-      if (document.hidden) {
-        stopPrompt(true);
-      } else if (audioCtx && audioCtx.state !== "running") {
-        try { await audioCtx.resume(); } catch (e) {}
-      }
-    });
-
-    updateModeUI();
-  </script>
+  updateModeUI();
+</script>
 </body>
 </html>
