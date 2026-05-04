@@ -141,15 +141,15 @@
       </div>
 
       <div class="mode-card">
-        <div class="mode-title">2：待开发</div>
-        <div class="mode-desc">这里预留给未来添加其他训练模式。</div>
-        <button class="disabled-btn" disabled>暂未开放</button>
+        <div class="mode-title">2：网前(带出球指引)</div>
+        <div class="mode-desc">随机输出右左右，并附有推、放、搓、勾对角击球指引。</div>
+        <button class="mode-btn" id="enterMode2Btn">进入训练</button>
       </div>
     </div>
 
     <!-- 模式1：保留原稳定逻辑 -->
-    <div id="mode1Page" class="hidden">
-      <h1>四方向随机提示</h1>
+    <div id="trainingPage" class="hidden">
+      <h1 id="trainingTitle">四方向随机提示</h1>
       <div id="phrase" class="phrase">准备开始</div>
       <div id="image" class="image">⬤</div>
 
@@ -194,6 +194,9 @@
         若无声音，请关闭手机静音模式 🔇
       </div>
     </div>
+
+
+    
   </div>
 
   <script>
@@ -208,7 +211,7 @@
         { label: "右后", file: "youhou.mp3", icon: "↘", group: "back" }
       ],
     
-      chooseItem: function(items, lastIndex) {
+      chooseItem: function(items, lastIndex, lastItem) {
         const idx = Math.floor(Math.random() * items.length);
         return { item: items[idx], index: idx };
       },
@@ -226,35 +229,70 @@
     
         return (min + Math.random() * (max - min)) * 1000;
       }
-    }
+    },
+    mode2: {
+      title: "推放搓勾随机提示",
+      items: [
+        { label: "右推", file: "youtu.mp3", icon: "➡推", group: "right" },
+        { label: "右放", file: "youfang.mp3", icon: "➡放", group: "right" },
+        { label: "右搓", file: "youcuo.mp3", icon: "➡搓", group: "right" },
+        { label: "右勾", file: "yougou.mp3", icon: "➡勾对角", group: "right", forceNextGroup: "left" },
+    
+        { label: "左推", file: "zuotui.mp3", icon: "⬅推", group: "left" },
+        { label: "左放", file: "zuofang.mp3", icon: "⬅放", group: "left" },
+        { label: "左搓", file: "zuocuo.mp3", icon: "⬅搓", group: "left" },
+        { label: "左勾", file: "zuogou.mp3", icon: "⬅勾对角", group: "left", forceNextGroup: "right" }
+      ],
+    
+      chooseItem: function(items, lastIndex, lastItem) {
+        let candidates = items;
+    
+        if (lastItem && lastItem.forceNextGroup) {
+          candidates = items.filter(item => item.group === lastItem.forceNextGroup);
+        }
+    
+        const chosen = candidates[Math.floor(Math.random() * candidates.length)];
+        const idx = items.indexOf(chosen);
+    
+        return { item: chosen, index: idx };
+      }
+    } 
   };
 
   let currentMode = "mode1";
   let currentItems = modeConfigs[currentMode].items;
 
   // ===== 页面切换，只影响UI，不改核心训练逻辑 =====
+  const trainingPageEl = document.getElementById("trainingPage");
+  const trainingTitleEl = document.getElementById("trainingTitle");
   const homePageEl = document.getElementById("homePage");
-  const mode1PageEl = document.getElementById("mode1Page");
 
-  function enterMode1Page() {
-    currentMode = "mode1";
-    currentItems = modeConfigs[currentMode].items;
+  function enterMode(modeName) {
+  currentMode = modeName;
+  currentItems = modeConfigs[currentMode].items;
 
-    // 切换模式时重置状态，避免之后新增模式时音频缓存混用
-    buffers = {};
-    lastIndex = -1;
+  buffers = {};
+  lastIndex = -1;
+  lastItem = null;
 
-    homePageEl.classList.add("hidden");
-    mode1PageEl.classList.remove("hidden");
+  trainingTitleEl.textContent = modeConfigs[currentMode].title;
+  phraseEl.textContent = "准备开始";
+  imageEl.textContent = "⬤";
+  setStatus("未运行");
+
+  homePageEl.classList.add("hidden");
+  trainingPageEl.classList.remove("hidden");
   }
 
   function goHomePage() {
-    stopPrompt(true);
-    mode1PageEl.classList.add("hidden");
-    homePageEl.classList.remove("hidden");
+  stopPrompt(true);
+  trainingPageEl.classList.add("hidden");
+  homePageEl.classList.remove("hidden");
   }
 
-  document.getElementById("enterMode1Btn").addEventListener("click", enterMode1Page);
+
+  document.getElementById("enterMode1Btn").addEventListener("click", () => enterMode("mode1"));
+  document.getElementById("enterMode2Btn").addEventListener("click", () => enterMode("mode2"));
   document.getElementById("backHomeBtn").addEventListener("click", goHomePage);
 
   // ===== 以下为原稳定版核心逻辑，基本保持不变 =====
@@ -277,6 +315,7 @@
   let running = false;
   let timer = null;
   let lastIndex = -1;
+  let lastItem = null;
   let currentSource = null;
 
   function setStatus(msg) {
@@ -289,19 +328,21 @@
     randomSectionEl.classList.toggle("hidden", isFixed);
   }
 
-    function chooseNextItem() {
-      const config = modeConfigs[currentMode];
-    
-      if (typeof config.chooseItem === "function") {
-        const result = config.chooseItem(currentItems, lastIndex);
-        lastIndex = result.index;
-        return result.item;
+  function chooseNextItem() {
+  const config = modeConfigs[currentMode];
+
+  if (typeof config.chooseItem === "function") {
+    const result = config.chooseItem(currentItems, lastIndex, lastItem);
+    lastIndex = result.index;
+    lastItem = result.item;
+    return result.item;
   }
 
   const idx = Math.floor(Math.random() * currentItems.length);
   lastIndex = idx;
+  lastItem = currentItems[idx];
   return currentItems[idx];
-}
+  }
   // function chooseNextItem() {
   // let idx = Math.floor(Math.random() * currentItems.length);
   // lastIndex = idx;
